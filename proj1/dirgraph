@@ -201,7 +201,7 @@ file_counter
 dir_counter
 file_size_counter
 
-##### PRDUCTION STAGE #####
+##### PRODUCTION STAGE #####
 if [[ "$NORMALIZE" -eq "1" ]]; then
 compute_normalization
 print_output
