@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+
+# REFERENCIA z http://linuxcommand.org/lc3_man_pages/seth.html
+set -o pipefail
+
+ # error handler funkcia na ktoru sa odkazujem pri zachyteni chyby pocas processu behu skriptu. Akakolvek chyba pocas processu ziskavania informacii ukoncuje skript, vypisuje chybovu hlasku, navracia chybovu navratovu hodnotu 1
+error_handler() {
+  case $1 in
+    eq_dir_ere) echo "ERROR: Ignored argument couldn't be the root directory" >&2; exit 1
+    ;;
+    pipefail) 
+    echo "ERROR has occurred. Maybe you don't have the root permission or the '-i' input is so useful, the return would be empty." >&2; exit 1
+    ;;
+    fail_input_dir) echo "ERROR: Input argument doesn't be the directory." >&2; exit 1
+    ;;
+    *) echo "USAGE: dirgraph [-i FILE_ERE] [-n] [DIR]" >&2; exit 1
+    ;;
+  esac
+  
+} 
+
+##### pociatocna inicializacia ##### 
+
+# nastavenie POSIXLY_CORRECT pocas celeho behu skriptu
+export POSIXLY_CORRECT=yes
+
+# "prepinac" normalizacie histogramu iniciallizovany na 0, kde pri zapnuty normalizacie histogramu je rovny 1
+NORMALIZE=0
+
+# pri nezadani adresara prikazovym riadkom, je adresarom aktualny pracovny adresar podla cesty spustitelnych programov (PATH)
+DIR=$(pwd)
+
+# celkovy pocet adresarov
+ND=0
+
+# celkovy pocet suborov
+NF=0
+
+# inicializacia FILE_ERE
+FILE_ERE=""
+
+
+# deklaracia pocitadiel suborov podla velkosti
+B100=0
+KIB1=0
+KIB10=0
+KIB100=0
+MIB1=0
+MIB10=0
+MIB100=0
+less_GIB1=0
+gr_eq_GIB1=0
+
+##### spracovanie vstupnych argumentov #####
+
+while getopts i:n "input_args"; do
+  case "$input_args" in
+    i)
+    FILE_ERE="$OPTARG"
+    if [[ "$FILE_ERE" == "-n" ]]; then error_handler; fi
+    ;;
+    n)
+    NORMALIZE=1
+    ;;
+    *) error_handler
+    ;;
+  esac
+done
+shift $((OPTIND-1))
+
+# zadanie viac ako jedneho argumentu mimo prepinacov vypise "helper" jediny argument predpokladame ze bude $DIR 
+if [[ "$#" -gt "1" ]]; then
+	error_handler
+fi
+
+# je zadany jeden argument prepodkladame ze to bude $DIR s cestou na root directory 
+if [[ "$#" -eq "1" ]]; then
+	DIR="$1"
+fi
+
+# vstupny argument DIR musi byt adresar 
+if [[ ! -d "$DIR" ]]; then error_handler "fail_input_dir"; fi
+
+# uplne do bodky rovnaky vstupny adresar a ignorovany adresar EXAMPLE: /etc/ -> /etc/ odchyti tuto chybu 
+if [[ "$DIR" = "$FILE_ERE" ]]; then error_handler "eq_dir_ere" ;fi
+
+##### pocitadlo suborov, ak je zadany prepinac -i(ignore), tak pocitam len subory a adresare, ktore nepokriva FILE_ERE(posixly extented regular expression)
+
+file_counter() {
+  if [[ -z "$FILE_ERE" ]];then
+    NF=$(find "$DIR" -type f 2>/dev/null | wc -l | tr -d "[:blank:]") #tr pridany kvoli FreeBSD OS... berie mi to white spaces ktore mi kazia vystup... tymto sa ich zbavim
+    if [[ "$?" -eq "1" ]]; then error_handler "pipefail"; fi
+  else
+    NF=$(find "$DIR" -type f 2>/dev/null | grep -vcE "$FILE_ERE")
+    if [[ "$?" -eq "1" ]]; then error_handler "pipefail"; fi
+  fi 
+}
+
+###### pocitadlo adresarov, ak je zadany prepinac -i(ignore), tak pocitam len subory a adresare, ktore nepokriva FILE_ERE(posixly extented regular expression)
+dir_counter() {
+  if [[ -z "$FILE_ERE" ]];then
+    ND=$(find "$DIR" -type d 2>/dev/null | wc -l | tr -d "[:blank:]") 
+    if [[ "$?" -eq "1" ]]; then error_handler "pipefail"; fi
+  else
+    ND=$(find "$DIR" -type d 2>/dev/null | grep -vcE "$FILE_ERE")
+    if [[ "$?" -eq "1" ]]; then error_handler "pipefail"; fi
+  fi
+
+}
+
+
+##### pocitadlo pocetnosti velkosti suborov zavyslej na intervale do ktoreho zapada ###
+##### ak je zadany prepinac -i(ignore), tak pocitam len subory a adresare, ktore nepokriva FILE_ERE(posixly extented regular expression)
+
+file_size_counter() {
+  if [[ -z "$FILE_ERE" ]]; then
+    B100=$(find "$DIR" -type f -size -100c 2>/dev/null | wc -l)
+    KIB1=$(find "$DIR" -type f -size +99c -size -1024c 2>/dev/null | wc -l)
+    KIB10=$(find "$DIR" -type f -size +1023c -size -10240c 2>/dev/null | wc -l)
+    KIB100=$(find "$DIR" -type f -size +10239c -size -102400c 2>/dev/null | wc -l)
+    MIB1=$(find "$DIR" -type f -size +102399c -size -1048576c 2>/dev/null | wc -l)
+    MIB10=$(find "$DIR" -type f  -size +1048575c -size -10485760c 2>/dev/null | wc -l)
+    MIB100=$(find "$DIR" -type f -size +10485759c -size -104857600c  2>/dev/null | wc -l)
+    less_GIB1=$(find "$DIR" -type f  -size +104857599c -size -1073741824c 2>/dev/null | wc -l)
+    gr_eq_GIB1=$(find "$DIR" -type f -size +1073741823c | wc -l)
+  else
+    B100=$(find "$DIR" -type f -size -100c 2>/dev/null | grep -vcE "$FILE_ERE")
+    KIB1=$(find "$DIR" -type f -size +99c -size -1024c  2>/dev/null | grep -vcE "$FILE_ERE")
+    KIB10=$(find "$DIR" -type f -size +1023c -size -10240c 2>/dev/null | grep -vcE "$FILE_ERE")
+    KIB100=$(find "$DIR" -type f -size +10239c -size -102400c 2>/dev/null | grep -vcE "$FILE_ERE")
+    MIB1=$(find "$DIR" -type f -size +102399c -size -1048576c 2>/dev/null | grep -vcE "$FILE_ERE")
+    MIB10=$(find "$DIR" -type f -size +1048575c -size -10485760c 2>/dev/null | grep -vcE "$FILE_ERE")
+    MIB100=$(find "$DIR" -type f -size +10485759c -size -104857600c 2>/dev/null | grep -vcE "$FILE_ERE")
+    less_GIB1=$(find "$DIR" -type f -size +104857599c -size -1073741824c 2>/dev/null | grep -vcE "$FILE_ERE")
+    gr_eq_GIB1=$(find "$DIR" -type f -size +1073741823c 2>/dev/null | grep -vcE "$FILE_ERE")
+  fi
+}
+# 
+# COMPUTE_ALGORITHM
+# 1) sirku terminalu zistim, tak ze skontrolujem ci mam na vystupe terminal alebo nie, odpocitam konstatny text(nachadzajuci sa na vystupe o dlzke 12+1 znakov) 
+# 2) ak je sirka histogramu vacsia (nie rovna $SIZE%$screen_width == 0) ako sirka terminalu-13,
+# tak vykonam operaciu modulo po ktorej histogram neprekroci sirku terminalo/vystupnej periferie 
+#
+
+compute_normalization() {
+  screen_width=0
+
+  if [[ -t 1 ]] ;then
+    screen_width=$(tput cols)
+    ((screen_width=screen_width-13))
+  else
+    screen_width=79
+    ((screen_width=screen_width-13))
+  fi
+  
+  if [[ "$B100" -gt "$screen_width" ]]; then B100=$((B100%screen_width)); fi 
+  if [[ "$KIB1" -gt "$screen_width" ]]; then KIB1=$((KIB1%screen_width)); fi 
+  if [[ "$KIB10" -gt "$screen_width" ]]; then KIB10=$((KIB10%screen_width)); fi 
+  if [[ "$KIB100" -gt "$screen_width" ]]; then KIB100=$((KIB100%screen_width)); fi 
+  if [[ "$MIB1" -gt "$screen_width" ]]; then MIB1=$((MIB1%screen_width)); fi 
+  if [[ "$MIB10" -gt "$screen_width" ]]; then MIB10=$((MIB10%screen_width)); fi 
+  if [[ "$MIB100" -gt "$screen_width" ]]; then MIB100=$((MIB100%screen_width)); fi 
+  if [[ "$less_GIB1" -gt "$screen_width" ]]; then less_GIB1=$((less_GIB1%screen_width)); fi 
+  if [[ "$gr_eq_GIB1" -gt "$screen_width" ]]; then gr_eq_GIB1=$((gr_eq_GIB1%screen_width)); fi 
+ 
+}
+
+##### pomocna funckcia hashtag_printer() na vykreslenie "#", ktore symbolizuju pocet suborov v danej velkostnej kategorii(ak nezapnem normalizaciu tak v pomere 1:1) #####
+
+hashtag_printer() {
+count_of_hash="$1"
+  while [[ "$count_of_hash" -gt "0" ]]; do
+    printf "#"
+    ((count_of_hash--))
+  done
+}
+
+##### funkcia print_output() na vypisanie uspesneho zistenia vsetkych informaci o adresaroch a suboroch #####
+##### ak je zapnuta normalizacia najpr volam funkciu compute_normalization() na upravu vstupnych hodnot pre vykreslenie histogramu #####
+##### a nasledne print_output() pre vypisanie vysledneho histogramu po modifikacii vystupnych hodnot normalizacnim algoritmom
+
+print_output() {
+  printf 'Root directory: %s\n' "$DIR"
+  printf 'Directories: %s\n' "$ND"
+  printf 'All files: %s\n' "$NF"
+  printf 'File size histogram:\n'
+  printf '  <100 B  : %s\n' "$(hashtag_printer "$B100")"
+  printf '  <1 KiB  : %s\n' "$(hashtag_printer "$KIB1")"
+  printf '  <10 KiB : %s\n' "$(hashtag_printer "$KIB10")"
+  printf '  <100 KiB: %s\n' "$(hashtag_printer "$KIB100")"
+  printf '  <1 MiB  : %s\n' "$(hashtag_printer "$MIB1")"
+  printf '  <10 MiB : %s\n' "$(hashtag_printer "$MIB10")"
+  printf '  <100 MiB: %s\n' "$(hashtag_printer "$MIB100")"
+  printf '  <1 GiB  : %s\n' "$(hashtag_printer "$less_GIB1")"
+  printf '  >=1 GiB : %s\n' "$(hashtag_printer "$gr_eq_GIB1")"
+  exit 0
+}
+
+##### PROCESSING STAGE #####
+file_counter
+dir_counter
+file_size_counter
+
+##### PRDUCTION STAGE #####
+if [[ "$NORMALIZE" -eq "1" ]]; then
+compute_normalization
+print_output
+else
+print_output
+fi 
+
+exit 0
